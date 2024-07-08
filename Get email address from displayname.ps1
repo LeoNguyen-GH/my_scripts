@@ -1,9 +1,7 @@
 . "$PSScriptRoot\common\functions.ps1"
 
 function display_user {
-    param (
-        [parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject[]]$user
-    )
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject[]]$user)
 
     if ($user.Count -gt 1) { $user | Select-Object UserPrincipalName, DisplayName | format-table } else { write-host $user.UserPrincipalName }
 }
@@ -27,6 +25,4 @@ function main {
 
 azureAD_connect
 
-while ($true) {
-    main
-}
+while ($true) { main }
