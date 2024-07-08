@@ -36,9 +36,7 @@ function add_group_member {
 
 function main {
     $users = multi_user_input -prompt "Enter the users email to add to the group/mailbox (Newline for multiple, enter 'q' 'to continue):"
-    if (!($users = validate_email -emails $users)) {
-        return
-    }
+    if (!($users = validate_email -emails $users)) { return }
     
     $groups = multi_user_input -prompt "Enter the group/mailbox email to add users to (Newline for multiple, enter 'q' to continue):"
 
