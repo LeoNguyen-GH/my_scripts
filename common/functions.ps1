@@ -1,3 +1,11 @@
+function get_functions {
+    # usage: get_functions -file_path "$PSScriptRoot\script.ps1" | Invoke-Expression
+    param ([parameter(Mandatory)] $file_path)
+
+    $script = Get-Command $file_path
+    return $script.ScriptBlock.AST.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)
+}
+
 function azureAD_connect {
     param(
         [bool]$silent = $false
@@ -152,24 +160,31 @@ function validate_email {
 }
 
 function validate_entra_ID_user {
-    [CmdletBinding()]
-    param (
-        [parameter(mandatory, ValueFromPipeline)] [string]$email
-    )
+    param ([parameter(mandatory)] [string]$email)
     
-    process {
-        if (!($user_object = Get-AzureADUser -SearchString $email)) {
-            write-host "User '$email' could not be found." -ForegroundColor Red
-            return $null
-        } elseif ($user_object.count -gt 1) {
-            write-host "User '$email' is not unique. Multiple users has been found:" -ForegroundColor Red
-            $user_object | Select-Object DisplayName, mail
-            return $null
-        } else {
-            write-host "User '$email' found" -ForegroundColor Green
-            return $user_object
-        }
+    if (!($user = Get-AzureADUser -SearchString $email)) {
+        write-host "User '$email' could not be found." -ForegroundColor Red
+        return $null
+    } elseif ($user.count -gt 1) {
+        write-host "User '$email' is not unique. Multiple users has been found:" -ForegroundColor Red
+        $user | Select-Object DisplayName, mail
+        return $null
+    } else {
+        write-host "User '$email' found" -ForegroundColor Green
+        return $user
     }
+}
+
+function get_entra_ID_user {
+    param ([string]$prompt = "Enter the user email to get the Entra ID user")
+
+    do {
+        do {
+            $email = (Read-Host $prompt).trim()
+        } while ([string]::IsNullOrEmpty($email))
+    } while ([string]::IsNullOrEmpty(($user = validate_entra_ID_user -email $email)))
+    
+    return $user
 }
 
 function group_type {
@@ -224,10 +239,11 @@ function closed_input {
 function export_csv {
     param (
         [parameter(mandatory)] $data,
-        [parameter(mandatory)] [string]$csv_file_path
+        [parameter(mandatory)] [string]$csv_file_path,
+        [bool]$silent = $false
     )
     
     [void](New-Item -Path (Split-Path -Path $csv_file_path -Parent) -ItemType "directory" -erroraction silentlycontinue)
     $data | Export-Csv -Path $csv_file_path -NoTypeInformation
-    write-host "Exported CSV -> $csv_file_path" -ForegroundColor Green
+    if (!$silent) {write-host "Exported CSV -> $csv_file_path" -ForegroundColor Green}
 }
