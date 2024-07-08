@@ -2,13 +2,10 @@
 get_functions -file_path "$PSScriptRoot\Add users to groups and mailboxes.ps1" | Invoke-Expression
 
 function display_groups {
-    param (
-        [parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user
-    )
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
     
     Write-Host "Updated groups for '$($user.UserPrincipalName)':"
-    do {
-        Get-AzureADUserMembership -ObjectId $user.ObjectId -All $true | Select-Object Displayname, Mail | format-table
+    do { Get-AzureADUserMembership -ObjectId $user.ObjectId -All $true | Select-Object Displayname, Mail | format-table
     } while ((Read-Host "Do you want to refresh '$($user.UserPrincipalName)' groups? (Y/N)").trim() -eq "Y")
 }
 
@@ -24,7 +21,7 @@ function main {
 
     # Get source user groups
     if (!($source_user_groups = Get-AzureADUserMembership -ObjectId $source_user.ObjectId -All $true)) {
-        write-host "No email groups was found for the source user '$source_user_UPN' to mirror from, cancelling current process" -ForegroundColor Yellow
+        write-warning "No email groups was found for the source user '$source_user_UPN' to mirror from, cancelling current process" -ForegroundColor Yellow
         return
     }
 
@@ -33,12 +30,10 @@ function main {
     $source_user_groups | Select-Object Displayname, Mail
 
     # Confirmation prompt to continue
-    if (!(closed_input -user_prompt "Do you want to continue? (Y/N)" -n_msg "Current process terminated.")) {
-        return
-    }
+    if (!(closed_input -user_prompt "Do you want to continue? (Y/N)" -n_msg "Current process terminated.")) { return }
     
     # Copy source user groups to target user
-    $filtered_groups = @("group1")
+    $filtered_groups = @("group@company.com")
     foreach ($group in $source_user_groups) {
         $group_ref = if ($group.mail) {$group.mail} else {$group.Displayname}
         if ($group_ref -in $filtered_groups) { continue }
@@ -52,6 +47,4 @@ function main {
 EXO_connect
 azureAD_connect
 
-while ($true) {
-    main
-}
+while ($true) { main }
