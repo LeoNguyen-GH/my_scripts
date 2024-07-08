@@ -2,30 +2,25 @@
 
 function display_user {
     param (
-        [parameter(mandatory)] [PSCustomObject]$user_object
+        [parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject[]]$user
     )
-    
-    write-host "$name not found, searching with only first name" -ForegroundColor Yellow
-    
-    if ($user_object.Count -gt 1) {
-        $user_object | Select-Object UserPrincipalName, DisplayName
-    } else {
-        write-host $user_object.UserPrincipalName
-    }
+
+    if ($user.Count -gt 1) { $user | Select-Object UserPrincipalName, DisplayName | format-table } else { write-host $user.UserPrincipalName }
 }
 
 function main {
-    $display_names = multi_user_input -prompt "Enter user displayname to get email address (Newline for multiple, enter 'q' to continue):"
+    $names = multi_user_input -prompt "Enter user displayname to get email address (Newline for multiple, enter 'q' to continue):"
 
-    foreach ($name in $display_names) {
+    foreach ($name in $names) {
         $first_name = $name -replace '^(\w+).*', '$1'
         
-        if ($user_object = Get-AzureADUser -SearchString $name) {
-            display_user -user_object $user_object
-        } elseif ($user_object = Get-AzureADUser -SearchString $first_name) {
-                display_user -user_object $user_object
+        if ($user = Get-AzureADUser -SearchString $name) {
+            display_user -user $user
+        } elseif ($user = Get-AzureADUser -SearchString $first_name) {
+            write-warning "$name not found, found search query with just first name '$first_name'."
+            display_user -user $user
         } else {
-            write-host "No match found for '$name" -Foregroundcolor Red
+            write-warning "No match found for '$name'."
         }
     }
 }
