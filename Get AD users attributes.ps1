@@ -3,17 +3,12 @@
 function get_OU_users {
     param ([parameter(Mandatory)] [string]$ouDN)
 
-    try {
-        return Get-ADUser -SearchBase $ouDN -Filter * -Properties *
-    } catch {
-        write-host "Error: $_" -ForegroundColor Red
-        return
-    }
+    try { return Get-ADUser -SearchBase $ouDN -Filter * -Properties * } catch { write-host "Error: $_" -ForegroundColor Red }
 }
 
-function format_user_data {
+function get_formatted_ADuser_data {
     [CmdletBinding()]
-    param ([parameter(Mandatory, ValuefromPipeline)] [array]$user)
+    param ([parameter(Mandatory, ValuefromPipeline)] [Microsoft.ActiveDirectory.Management.ADAccount]$user)
     
     process {
         return [PSCustomObject]@{
@@ -33,18 +28,15 @@ function format_user_data {
 }
 
 function main {
-    multi_user_input -prompt "Enter OU distinguished name to parse AD users (Newline for multiple, enter 'q' to continue):" | ForEach-Object {
-        if (!($users = get_OU_users -ouDN $_)) {
-            return
-        }
+    $ouDNs = multi_user_input -prompt "Enter OU distinguished name to parse AD users (Newline for multiple, enter 'q' to continue):"
+
+    foreach ($ouDN in $ouDNs) {
+        if (!($users = get_OU_users -ouDN $ouDN)) { continue }
         
         $users_data = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-        $users | format_user_data | ForEach-Object {
-            $users_data.Add($_)
-        }
+        $users | get_formatted_ADuser_data | ForEach-Object { $users_data.Add($_) }
         
-        export_csv -csv_file_path "$PSScriptRoot\_logs\exported\AD users - $_ $(Get-Date -Format "dd-MM-yyyy h.mmtt").csv" -data $users_data
+        export_csv -csv_file_path "$PSScriptRoot\_logs\exported\AD users - $ouDN $(Get-Date -Format "dd-MM-yyyy h.mmtt").csv" -data $users_data
     }
 }
 
