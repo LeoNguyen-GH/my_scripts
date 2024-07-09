@@ -7,7 +7,7 @@ function display_user {
 }
 
 function main {
-    $names = multi_user_input -prompt "Enter user displayname to get email address (Newline for multiple, enter 'q' to continue):"
+    $names = get_multi_user_input -prompt "Enter user displayname to get email address (Newline for multiple, enter 'q' to continue):"
 
     foreach ($name in $names) {
         $first_name = $name -replace '^(\w+).*', '$1'
