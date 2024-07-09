@@ -1,55 +1,53 @@
 . "$PSScriptRoot\common\functions.ps1"
+get_functions -file_path "$PSScriptRoot\Get group or mailbox members.ps1" | Invoke-Expression
 
-function get_members {
+function get_group_members_recursive {
+    # Get the members from the group and export it then pass it to the function that finds the member's group type
     param (
         [parameter(mandatory)] [string]$group_email,
-        [parameter(mandatory)] [string]$output_file_parent_path,
-        [parameter(mandatory)] [string]$group_type
+        [parameter(mandatory)] [string]$output_file_parent_path
     )
 
-    $members = switch ($group_type) {
-        "distribution list" {Get-DistributionGroupMember -Identity $group_email -ResultSize unlimited | Select-Object @{Name='Name'; Expression={$_.DisplayName}}, @{Name='Email'; Expression={$_.PrimarySmtpAddress}}}
-        "Microsoft 365 group" {Get-UnifiedGroupLinks -Identity $group_email -LinkType Members -ResultSize Unlimited -ErrorAction SilentlyContinue | Select-Object @{Name='Name'; Expression={$_.DisplayName}}, @{Name='Email'; Expression={$_.PrimarySmtpAddress}}}
-        "security group" {Get-AzureADGroupMember -ObjectId (Get-AzureADGroup -SearchString $group_email).ObjectId -All:$true -ErrorAction SilentlyContinue | Select-Object @{Name='Name'; Expression={$_.DisplayName}}, @{Name='Email'; Expression={$_.UserPrincipalName}}}
-        "dynamic distribution list" {Get-Recipient -RecipientPreviewFilter (Get-DynamicDistributionGroup -Identity $group_email -ErrorAction SilentlyContinue).RecipientFilter | Select-Object @{Name='Name'; Expression={$_.DisplayName}}, @{Name='Email'; Expression={$_.PrimarySmtpAddress}}}
-    }
+    $members = get_group_members -group $group_email
     
     $members | Export-Csv -Path "$output_file_parent_path\$group_email.csv" -NoTypeInformation
 
-    get_members_type -members $members -parent_dir_path $output_file_parent_path
+    get_group_type_recursive -members $members -parent_dir_path $output_file_parent_path
 }
 
-function get_members_type {
+function get_group_type_recursive {
+    # Send each member that is a group type to the function that gets its members and exports it
     param (
-        [parameter(mandatory)] [array]$members,
+        [parameter(mandatory)] [PSCustomObject[]]$members,
         [parameter(mandatory)] [string]$parent_dir_path
     )
 
-    # Check if each member is a type group
     foreach ($member in $members) {
-        if (($group_type = group_type -email $member.email) -in @("security group", "Microsoft 365 group", "dynamic distribution list", "distribution list")) {
+        if ((get_group_type -email $member.email) -in @("security group", "Microsoft 365 group", "dynamic distribution list", "distribution list")) {
+            write-host "Searching for members with type group in group '$($member.email)'"
+            
             $exported_folder_path = New-Item -Path "$parent_dir_path\$($member.email)" -ItemType "directory"
-            get_members -group_email $member.email -output_file_parent_path $exported_folder_path.FullName -group_type $group_type
+            
+            get_group_members_recursive -group_email $member.email -output_file_parent_path $exported_folder_path.FullName
         }
     }
 }
 
 function main {
-    multi_user_input -prompt "Enter the groups and mailboxes email to parse recursively (Newline for multiple, enter 'q' to continue):" | ForEach-Object {
-        if (($group_type = group_type -email $_) -notin @("security group", "Microsoft 365 group", "dynamic distribution list", "distribution list")) {
-            Write-Host "Group '$_' does not exist." -ForegroundColor Red
-            return
+    $groups = get_multi_user_input -prompt "Enter the groups and mailboxes email to parse recursively (Newline for multiple, enter 'q' to continue):"
+
+    foreach ($group in $groups) {
+        if ((get_group_type -email $group) -in @("security group", "Microsoft 365 group", "dynamic distribution list", "distribution list")) {     
+            $exported_folder_path = New-Item -Path "$PSScriptRoot\_logs\exported\$group" -ItemType "directory"
+            
+            get_group_members_recursive -group_email $group -output_file_parent_path $exported_folder_path.FullName
+        } else {
+            write-warning "Group '$group' could not be found."
         }
-        
-        $exported_folder_path = New-Item -Path "$PSScriptRoot\_logs\exported\$_" -ItemType "directory"
-        
-        get_members -group_email $_ -output_file_parent_path $exported_folder_path.FullName -group_type $group_type
     }
 }
 
 EXO_connect
 azureAD_connect
 
-while ($true) {
-    main
-}
+while ($true) { main }
