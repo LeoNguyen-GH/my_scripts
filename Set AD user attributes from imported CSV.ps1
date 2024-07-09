@@ -1,22 +1,3 @@
-function get_validated_Input {
-    param (
-        [parameter(mandatory)] [string]$condition,
-        [parameter(mandatory)] [string]$prompt,
-        [string]$before_prompt = $null,
-        [string]$after_prompt = $null
-        )
-    
-    if ($before_prompt) {write-host $before_prompt}
-    
-    do {
-        $user_input = (read-host $prompt).trim().trim('"')
-    } while ((Invoke-Expression $condition))
-    
-    if ($after_prompt) {write-host $after_prompt -ForegroundColor Green}
-    
-    return $user_input
-}
-
 function new_csv {
     param (
         [parameter(mandatory)] [string]$file_path,
@@ -51,16 +32,16 @@ function add_log {
 }
 
 function main {
-    $csv_file_path = get_validated_Input -prompt "Enter the csv file path to import to AD user attributes" -condition "!`$user_input -or !(Test-Path -Path `$user_input -PathType Leaf -Include *.csv)" -after_prompt "csv validated"
-    $OU = get_validated_Input -prompt "Enter OU distinguished name to modify AD users attributes" -condition "!`$user_input -or !(Get-ADOrganizationalUnit -Filter `"DistinguishedName `-eq `'`$user_input`'`")"
-    $search_user_attribute = get_validated_Input -prompt "Enter the displayed option to use for searching AD users" -before_prompt "1. displayName`n2. userPrincipalName`n3. mail" -condition "`$user_input -notin @('displayName', 'userPrincipalName', 'mail')"
-    $set_user_attribute = get_validated_Input -prompt "Enter the displayed option to use for modifying AD users attributes" -before_prompt "1. telephonenumber`n2. mobile`n3. title`n4. department`n5. description" -condition "`$user_input -notin @('telephonenumber', 'mobile', 'title', 'department', 'description')"
+    $csv_file_path = get_validated_input -prompt "Enter the csv file path to import to AD user attributes" -condition "!`$user_input -or !(Test-Path -Path `$user_input -PathType Leaf -Include *.csv)" -after_prompt "csv validated"
+    $OU = get_validated_input -prompt "Enter OU distinguished name to modify AD users attributes" -condition "!`$user_input -or !(Get-ADOrganizationalUnit -Filter `"DistinguishedName `-eq `'`$user_input`'`")"
+    $search_user_attribute = get_validated_input -prompt "Enter the displayed option to use for searching AD users" -before_prompt "1. displayName`n2. userPrincipalName`n3. mail" -condition "`$user_input -notin @('displayName', 'userPrincipalName', 'mail')"
+    $set_user_attribute = get_validated_input -prompt "Enter the displayed option to use for modifying AD users attributes" -before_prompt "1. telephonenumber`n2. mobile`n3. title`n4. department`n5. description" -condition "`$user_input -notin @('telephonenumber', 'mobile', 'title', 'department', 'description')"
     
     $csv_data = Import-Csv -Path $csv_file_path
     $csv_headers = $csv_data[0].PSObject.Properties.Name
     
-    $csv_search_user_attribute = get_validated_Input -prompt "Enter the csv header you want to use to match the attribute '$search_user_attribute' on AD" -before_prompt "$($csv_headers -join ', ')" -condition "`$user_input -notin `$csv_headers"
-    $csv_set_user_attribute = get_validated_Input -prompt "Enter the csv header you want to use to replace the attribute '$set_user_attribute' on AD" -before_prompt "$($csv_headers -join ', ')" -condition "`$user_input -notin `$csv_headers"
+    $csv_search_user_attribute = get_validated_input -prompt "Enter the csv header you want to use to match the attribute '$search_user_attribute' on AD" -before_prompt "$($csv_headers -join ', ')" -condition "`$user_input -notin `$csv_headers"
+    $csv_set_user_attribute = get_validated_input -prompt "Enter the csv header you want to use to replace the attribute '$set_user_attribute' on AD" -before_prompt "$($csv_headers -join ', ')" -condition "`$user_input -notin `$csv_headers"
     
     write-host "Using csv header '$csv_search_user_attribute' to search with AD attribute '$search_user_attribute'." -ForegroundColor Cyan 
     write-host "Using csv header '$csv_set_user_attribute' to set AD attribute '$set_user_attribute'." -ForegroundColor Cyan
@@ -86,6 +67,4 @@ function main {
     }
 }
 
-while ($true) {
-    main
-}
+while ($true) { main }
