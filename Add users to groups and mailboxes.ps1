@@ -9,7 +9,7 @@ function add_group_member {
     
     begin {
         $users_added = 0
-        $group_type = group_type -email $group
+        $group_type = get_group_type -email $group
 
         if (!$group_type) { throw "Couldn't find group '$group'." }
         elseif ($group_type -eq "dynamic distribution list") { throw "Cannot assign members to a dynamic distribution list: '$group'" }
@@ -35,10 +35,10 @@ function add_group_member {
 }
 
 function main {
-    $users = multi_user_input -prompt "Enter the users email to add to the group/mailbox (Newline for multiple, enter 'q' 'to continue):"
-    if (!($users = validate_email -emails $users)) { return }
+    $users = get_multi_user_input -prompt "Enter the users email to add to the group/mailbox (Newline for multiple, enter 'q' 'to continue):"
+    if (!($users = get_valid_email -emails $users)) { return }
     
-    $groups = multi_user_input -prompt "Enter the group/mailbox email to add users to (Newline for multiple, enter 'q' to continue):"
+    $groups = get_multi_user_input -prompt "Enter the group/mailbox email to add users to (Newline for multiple, enter 'q' to continue):"
 
     foreach ($group in $groups) {
         try { $users | add_group_member -group $group -display_total $true } catch { write-warning $_ }
@@ -48,6 +48,4 @@ function main {
 EXO_connect
 azureAD_connect
 
-while ($true) {
-    main
-}
+while ($true) { main }
