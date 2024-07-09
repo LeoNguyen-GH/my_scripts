@@ -28,7 +28,7 @@ function get_formatted_ADuser_data {
 }
 
 function main {
-    $ouDNs = multi_user_input -prompt "Enter OU distinguished name to parse AD users (Newline for multiple, enter 'q' to continue):"
+    $ouDNs = get_multi_user_input -prompt "Enter OU distinguished name to parse AD users (Newline for multiple, enter 'q' to continue):"
 
     foreach ($ouDN in $ouDNs) {
         if (!($users = get_OU_users -ouDN $ouDN)) { continue }
@@ -40,6 +40,4 @@ function main {
     }
 }
 
-while ($true) {
-    main
-}
+while ($true) { main }
