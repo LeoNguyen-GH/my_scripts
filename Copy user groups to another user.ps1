@@ -10,8 +10,8 @@ function display_groups {
 }
 
 function main {
-    $source_user = get_entra_ID_user -prompt "Enter email of source user to copy email groups from" 
-    $target_user = get_entra_ID_user -prompt "Enter email of target user to mirror email groups from source user"
+    $source_user = get_validated_input -prompt "Enter email of source user to copy email groups from" -condition "!(`$user_input = get_valid_entra_ID_user -email `$user_input)"
+    $target_user = get_validated_input -prompt "Enter email of target user to mirror email groups from source user" -condition "!(`$user_input = get_valid_entra_ID_user -email `$user_input)"
 
     # Discontinue the process if source and target user is the same
     if (($source_user_UPN = $source_user.UserPrincipalName) -eq ($target_user_UPN = $target_user.UserPrincipalName)) {
@@ -27,7 +27,7 @@ function main {
 
     # Display source user groups
     Write-Host "Adding listed email groups: Source user '$source_user_UPN' -> Target user '$target_user_UPN'" -ForegroundColor Blue
-    $source_user_groups | Select-Object Displayname, Mail
+    $source_user_groups | Select-Object Displayname, Mail | format-table
 
     # Confirmation prompt to continue
     if (!(closed_input -user_prompt "Do you want to continue? (Y/N)" -n_msg "Current process terminated.")) { return }
