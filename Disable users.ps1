@@ -83,15 +83,12 @@ function remove_user_group {
 }
 
 function remove_all_user_licenses {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$user,
-        [parameter(mandatory)] [string]$email
-    )
+    param ([parameter(mandatory)] [PSCustomObject]$user)
 
     [array]$Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
 
     if (!$Skus) {
-        Write-Host "No licenses found for '$email'" -ForegroundColor Magenta
+        Write-Host "No licenses found for '$($user.UserPrincipalName)'" -ForegroundColor Magenta
         return
     }
     
@@ -101,14 +98,12 @@ function remove_all_user_licenses {
         $licenses.RemoveLicenses += $sku
     }
     
-    Set-AzureADUserLicense -ObjectId $email -AssignedLicenses $licenses
-    Write-Host "Removed $($Skus.count) licenses from $email`: `n$($licenses.RemoveLicenses)" -ForegroundColor Magenta
+    Set-AzureADUserLicense -ObjectId $user.UserPrincipalName -AssignedLicenses $licenses
+    Write-Host "Removed $($Skus.count) licenses from $($user.UserPrincipalName)`: `n$($licenses.RemoveLicenses)" -ForegroundColor Magenta
 }
 
 function check_mailbox_type {
-    param (
-        [parameter(mandatory)] [string]$email
-    )
+    param ([parameter(mandatory)] [string]$email)
 
     if (($mailbox_type = (Get-Mailbox -Identity $email).RecipientTypeDetails) -eq "SharedMailbox") {
         Write-Host "$email has a $mailbox_type." -ForegroundColor Green
@@ -120,46 +115,40 @@ function check_mailbox_type {
 }
 
 function check_license {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$cloud_user_object
-    )
+    param ([parameter(mandatory)] [PSCustomObject]$user)
 
-    [array]$Skus = ($cloud_user_object | Select-Object -ExpandProperty AssignedLicenses).SkuID
+    [array]$Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
 
     if (!$Skus) {
-        Write-Host "$($cloud_user_object.UserPrincipalName) has no licenses" -ForegroundColor Green
+        Write-Host "$($user.UserPrincipalName) has no licenses" -ForegroundColor Green
     } else {
-        Write-Warning "$($cloud_user_object.UserPrincipalName) still has license found:`n$Skus"
+        Write-Warning "$($user.UserPrincipalName) still has license found:`n$Skus"
         $global:retry = $true
     }
 }
 
 function check_groups {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$cloud_user_object
-    )
+    param ([parameter(mandatory)] [PSCustomObject]$user)
     
-    if (Get-AzureADUserMembership -ObjectId $cloud_user_object.ObjectId | Where-Object { ($_.ObjectType -eq "Group") -and ($_.DirSyncEnabled -ne "True") }) {
-        Write-Warning "$($cloud_user_object.UserPrincipalName) is a member of an email group"
+    if (Get-AzureADUserMembership -ObjectId $user.ObjectId | Where-Object { ($_.ObjectType -eq "Group") -and ($_.DirSyncEnabled -ne "True") }) {
+        Write-Warning "$($user.UserPrincipalName) is a member of an email group"
         $global:retry = $true   
     } else {
-        write-host "$($cloud_user_object.UserPrincipalName) is not a member of any email group." -ForegroundColor Green
+        write-host "$($user.UserPrincipalName) is not a member of any email group." -ForegroundColor Green
     }
 }
 
 function disable_user_checks {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$cloud_user_object
-    )
+    param ([parameter(mandatory)] [PSCustomObject]$user)
 
     for ($i=0; $i -lt 3; $i++) {
-        $global:retry =$false
+        $global:retry = $false
+        
+        check_mailbox_type -email $user.UserPrincipalName
+        check_license -user $user
+        check_groups -user $user
 
-        check_mailbox_type -email $cloud_user_object.UserPrincipalName
-        check_license -cloud_user_object $cloud_user_object
-        check_groups -cloud_user_object $cloud_user_object
-
-        if (!$global:retry) { break }
+        if (!$global:retry) { return }
         
         start-sleep 20
     }
@@ -181,8 +170,9 @@ function main {
     $users_email = get_multi_user_input -prompt "Enter user email to disable (Newline for multiple, enter 'q' to continue):"
     if (!($users_email = get_valid_email -emails $users_email -type_aduser $true)) { return }
     
-    foreach ($user_email in $users_email) {
-        [void](New-Item -Path "$PSScriptRoot\_logs\disabled_users" -ItemType "directory" -erroraction silentlycontinue)
+    [void](New-Item -Path "$PSScriptRoot\_logs\disabled_users" -ItemType "directory" -erroraction silentlycontinue)
+    
+    foreach ($user_email in $users_email) { 
         [void](Start-Transcript -Path "$PSScriptRoot\_logs\disabled_users\$user_email - $(Get-Date -Format 'dd-MM-yyyy h.mmtt').txt")
         
         write-host "Disabling user: $user_email"
@@ -212,7 +202,7 @@ function main {
 
         remove_user_group -user_objectID $entra_id_user.ObjectId -email $UPN
 
-        remove_all_user_licenses -user $entra_id_user -email $UPN
+        remove_all_user_licenses -user $entra_id_user
         
         if ($auto_reply_msg) {
             Set-MailboxAutoReplyConfiguration -Identity $UPN -AutoReplyState enabled -InternalMessage $auto_reply_msg -ExternalMessage $auto_reply_msg
@@ -221,7 +211,7 @@ function main {
         
         Start-Sleep 20
         
-        disable_user_checks -cloud_user_object $entra_id_user
+        disable_user_checks -user $entra_id_user
         
         address_book_status -email $UPN
         
