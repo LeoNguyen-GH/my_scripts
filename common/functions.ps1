@@ -6,70 +6,44 @@ function get_functions {
     return $script.ScriptBlock.AST.FindAll({ $args[0] -is [Management.Automation.Language.FunctionDefinitionAst] }, $false)
 }
 
-function azureAD_connect {
+function connect_services {
     param(
-        [bool]$silent = $false
+        [bool]$silent = $false,
+        [parameter(Mandatory)] [string]$service_name,
+        [parameter(Mandatory)] [string]$test_expression,
+        [parameter(Mandatory)] [string]$connect_expression
     )
     
     while ($true) {
         try {
-            if (get-azureADUser -Top 1) {
-                if (!$silent) { write-host "Successfully connected to Entra ID" -ForegroundColor Green }
-                break
-            }
+            Invoke-Expression $test_expression
+            if (!$silent) { write-host "Successfully connected to $service_name" -ForegroundColor Green }
+            return
         } catch {
-            try {
-                if (!$silent) { Write-host "Connecting to Entra ID" -Foregroundcolor Cyan }
-                Connect-AzureAD -ErrorAction SilentlyContinue
-            } catch {
-                if (!$silent) { Write-Host "Error occured while trying to connect to Entra ID, trying again." -ForegroundColor Red }
-            }
+            if (!$silent) { Write-host "Connecting to $service_name" -Foregroundcolor Cyan }
+            Invoke-Expression $connect_expression
         }
     }
+}
+
+function azureAD_connect {
+    connect_services -service_name "Entra ID" -test_expression "[void](get-azureADUser -Top 1)" -connect_expression "Connect-AzureAD -ErrorAction SilentlyContinue"
 }
 
 function EXO_connect {
-    param (
-        [string]$UPN = "admin@company.com",
-        [bool]$silent = $false
-    )
-    
-    while ($true) {
-        try {
-            if (Get-AcceptedDomain) {
-                if (!$silent) {Write-host "Successfully connected to EXO" -ForegroundColor Green}
-                break
-            }
-        } catch {
-            try {
-                if (!$silent) {Write-host "Connecting to EXO" -Foregroundcolor Cyan}
-                Connect-ExchangeOnline -UserPrincipalName $UPN *> $null
-            } catch {
-                if (!$silent) { Write-Host "Error occured and could not connect to ExchangeOnline, trying again." -ForegroundColor Red }
-            }
-        }
-    }
+    param ([string]$UPN = "admin@company.com")
+    connect_services -service_name "ExchangeOnline" -test_expression "[void](Get-AcceptedDomain)" -connect_expression "Connect-ExchangeOnline -UserPrincipalName $UPN *> `$null"
 }
 
 function MSOL_connect {
-    while ($true) {
-        $ErrorActionPreference = "SilentlyContinue"
-        if (Get-MsolUser -MaxResults 1) {
-            write-host "Successfully connected to MsolService" -ForegroundColor Green
-            $ErrorActionPreference = "Continue"
-            break
-        } else {
-            Write-host "Connecting to MsolService" -Foregroundcolor Cyan
-            connect-MsolService *>&1 | Out-Null
-        }
-    }
+    connect_services -service_name "MsolService" -test_expression "[void](Get-MsolUser -MaxResults 1)" -connect_expression "connect-MsolService *>&1 | Out-Null"
 }
 
 function print_dash_across_terminal {
     Write-Host ("-" * (Get-Host).UI.RawUI.WindowSize.Width)
 }
 
-function multi_user_input {
+function get_multi_user_input {
     param (
         [string]$prompt = "Enter data below (Newline for multiple, enter 'q' to continue):",
         [bool]$sort = $false
@@ -94,7 +68,7 @@ function multi_user_input {
     return $data = if ($sort) { $data | Sort-Object } else { $data }
 }
 
-function email_type {
+function get_email_type {
     param (
         [parameter(mandatory)] [string]$email,
         [bool]$type_aduser = $false
@@ -120,13 +94,13 @@ function email_type {
     return $null
 }
 
-function prompt_for_valid_email {
+function get_valid_email_input {
     param (
         [parameter(mandatory)] [string]$email,
         [bool]$type_aduser = $false
     )
     
-    while ([string]::IsNullOrEmpty((email_type -email $email -type_aduser $type_aduser)) -eq $true) {
+    while (!(get_email_type -email $email -type_aduser $type_aduser)) {
         Write-Host "Email '$email' could not be found" -ForegroundColor Red
         
         do {
@@ -144,7 +118,7 @@ function prompt_for_valid_email {
     return $email
 }
 
-function validate_email {
+function get_valid_email {
     param (
         [parameter(mandatory)] [System.Collections.Generic.List[string]]$emails,
         [bool]$type_aduser = $false
@@ -153,21 +127,20 @@ function validate_email {
     Write-Host "Validating emails" -ForegroundColor Cyan
     
     for ($i = 0; $i -lt $emails.Count; $i++) {
-        $emails[$i] = prompt_for_valid_email -email $emails[$i] -type_aduser $type_aduser
+        $emails[$i] = get_valid_email_input -email $emails[$i] -type_aduser $type_aduser
     }
     
    return $emails | Select-Object -Unique
 }
 
-function validate_entra_ID_user {
-    param ([parameter(mandatory)] [string]$email)
+function get_valid_entra_ID_user {
+    param ([parameter(mandatory=$false)] [string]$email)
     
     if (!($user = Get-AzureADUser -SearchString $email)) {
         write-host "User '$email' could not be found." -ForegroundColor Red
         return $null
     } elseif ($user.count -gt 1) {
-        write-host "User '$email' is not unique. Multiple users has been found:" -ForegroundColor Red
-        $user | Select-Object DisplayName, mail
+        write-host "User '$email' is not unique, multiple users has been found." -ForegroundColor Red
         return $null
     } else {
         write-host "User '$email' found" -ForegroundColor Green
@@ -175,39 +148,42 @@ function validate_entra_ID_user {
     }
 }
 
-function get_entra_ID_user {
-    param ([string]$prompt = "Enter the user email to get the Entra ID user")
-
-    do {
-        do {
-            $email = (Read-Host $prompt).trim()
-        } while ([string]::IsNullOrEmpty($email))
-    } while ([string]::IsNullOrEmpty(($user = validate_entra_ID_user -email $email)))
+function get_validated_input {
+    param (
+        [parameter(mandatory)] [string]$condition,
+        [parameter(mandatory)] [string]$prompt,
+        [string]$before_prompt = $null,
+        [string]$after_prompt = $null
+    )
     
-    return $user
+    if ($before_prompt) {write-host $before_prompt}
+    
+    do {
+        $user_input = (read-host $prompt).trim().trim('"')
+    } while ((Invoke-Expression $condition))
+    
+    if ($after_prompt) {write-host $after_prompt -ForegroundColor Green}
+    
+    return $user_input
 }
 
-function group_type {
-    param (
-        [parameter(mandatory)] [string]$email
-    ) 
+function get_group_type {
+    param ([parameter(mandatory)] [string]$email) 
     
-    if (![string]::IsNullOrEmpty((Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue))) {
+    if (Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue) {
         return "distribution list"
-    } elseif (![string]::IsNullOrEmpty((Get-Recipient -Identity $email -RecipientTypeDetails DynamicDistributionGroup -ErrorAction SilentlyContinue))) {
+    } elseif (Get-Recipient -Identity $email -RecipientTypeDetails DynamicDistributionGroup -ErrorAction SilentlyContinue) {
         return "dynamic distribution list"
-    } elseif (![string]::IsNullOrEmpty((Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue))) {
+    } elseif (Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue) {
         return "Microsoft 365 group"
-    } elseif (![string]::IsNullOrEmpty((Get-AzureADGroup -SearchString $email -ErrorAction SilentlyContinue))) {
+    } elseif (Get-AzureADGroup -SearchString $email -ErrorAction SilentlyContinue) {
         return "security group"
-    } elseif (![string]::IsNullOrEmpty(($group = Get-Mailbox -Identity $email -ErrorAction SilentlyContinue))) {
+    } elseif ($group = Get-Mailbox -Identity $email -ErrorAction SilentlyContinue) {
         if ($group.RecipientTypeDetails -eq "SharedMailbox") {
             return "shared mailbox"
-        }
-        elseif ($group.RecipientTypeDetails -eq "RoomMailbox") {
+        } elseif ($group.RecipientTypeDetails -eq "RoomMailbox") {
             return "RoomMailbox"
-        }
-        elseif ($group.RecipientTypeDetails -eq "UserMailbox") {
+        } elseif ($group.RecipientTypeDetails -eq "UserMailbox") {
             return "user mailbox"
         }
     } else {
