@@ -75,18 +75,18 @@ function get_email_type {
     )
     
     if ($type_aduser) {
-        return $result =  if (((Get-ADUser -Filter {UserPrincipalName -eq $email}))) { $true } else { $null }
+        return $result =  if (Get-ADUser -Filter {UserPrincipalName -eq $email}) { $true } else { $null }
     }
-
-    if (![string]::IsNullOrEmpty((Get-AzureADUser -SearchString $email -All $true))) {
+    
+    if (Get-AzureADUser -SearchString $email -All $true) {
         return "cloud user"
-    } elseif (![string]::IsNullOrEmpty((Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue))) {
+    } elseif (Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue) {
         return "distribution list"
-    } elseif (![string]::IsNullOrEmpty((Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue))) {
+    } elseif (Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue) {
         return "Microsoft 365 group"
     } else {
         try { $object = Get-AzureADContact -All $true -Filter "mail eq $email" } catch {} 
-        if (![string]::IsNullOrEmpty($object)) {
+        if ($object) {
             return "contact email"
         }
     }
@@ -105,7 +105,7 @@ function get_valid_email_input {
         
         do {
             $email = (Read-Host "Enter a valid email (Input 'skip' to skip)" ).trim()
-        } while ([string]::IsNullOrEmpty($email))
+        } while (!$email)
         
         if ($email -eq "skip") {
             Write-host "Skipping email '$email''" -ForegroundColor Yellow
