@@ -8,35 +8,23 @@ function set_auto_reply {
 }
 
 function get_user_data {
-    param (
-        [parameter(mandatory)] [string]$email
-    )
+    param ([parameter(mandatory)] [string]$email)
     
-    if (!($user = Get-ADUser -Filter { userPrincipalName -eq $email })) {
-        $user = Get-ADUser -Filter { EmailAddress -eq $email }
-    }
-    
-    return $user
+    return $user = if ($user = Get-ADUser -Filter { userPrincipalName -eq $email }) { $user } else { Get-ADUser -Filter { EmailAddress -eq $email } }
 }
 
 function check_user_enabled_state {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$user
-    )
+    param ([parameter(mandatory)] [Microsoft.ActiveDirectory.Management.ADAccount]$user)
     
-    if ($user.Enabled -eq $false) {
-        if (!(closed_input -user_prompt "User '$($user.SamAccountName)' is already disabled. Do you want to continue? (Y/N)" -n_msg "User disable process terminated.")) {
-            return $true
-        }
+    if ($user.Enabled -eq $false -and !(closed_input -user_prompt "User '$($user.SamAccountName)' is already disabled. Do you want to continue? (Y/N)" -n_msg "User disable process terminated.")) {
+        return $true
+    } else {
+        return $null
     }
-    
-    return $null
 }
 
 function remove_attributes {
-    param (
-        [parameter(mandatory)] [PSCustomObject]$user
-    )
+    param ([parameter(mandatory)] [Microsoft.ActiveDirectory.Management.ADAccount]$user)
     
     try { $manager = (Get-ADUser $($user.manager)).name } catch { $manager = $null }
     write-host "Removing user attributes Company ($($user.company)), Department ($($user.department)), Manager ($manager)"
@@ -46,7 +34,7 @@ function remove_attributes {
 function move_ADUser {
     param (
         [parameter(mandatory)] [string]$OU_name,
-        [parameter(mandatory)] [PSCustomObject]$user
+        [parameter(mandatory)] [Microsoft.ActiveDirectory.Management.ADAccount]$user
     )
     
     $OU = Get-ADOrganizationalUnit -Filter { Name -eq $OU_name }
@@ -68,14 +56,16 @@ function remove_user_group {
         [parameter(mandatory)] [string]$user_objectID,
         [parameter(mandatory)] [string]$email
     )
-
-    Get-AzureADUserMembership -ObjectId $user_objectID | Where-Object { ($_.ObjectType -eq "Group") -and ($_.DirSyncEnabled -ne "True") } | ForEach-Object {
-        if ($group = Get-DistributionGroup -Identity $_.ObjectId -ErrorAction SilentlyContinue) {
-            Remove-DistributionGroupMember -Identity $group.PrimarySmtpAddress -Member $email -BypassSecurityGroupManagerCheck -Confirm:$false
-            write-host "Removed '$email' from distribution/mail enabled group: $($group.PrimarySmtpAddress)" -ForegroundColor Cyan
+    
+    $groups = Get-AzureADUserMembership -ObjectId $user_objectID | Where-Object { ($_.ObjectType -eq "Group") -and ($_.DirSyncEnabled -ne "True") }
+    
+    foreach ($group in $groups) {
+        if ($group_ref = Get-DistributionGroup -Identity $group.ObjectId -ErrorAction SilentlyContinue) {
+            Remove-DistributionGroupMember -Identity $group_ref.PrimarySmtpAddress -Member $email -BypassSecurityGroupManagerCheck -Confirm:$false
+            write-host "Removed '$email' from distribution/mail enabled group: $($group_ref.PrimarySmtpAddress)" -ForegroundColor Cyan
         } else {
-            remove-AzureADGroupMember -ObjectId $_.ObjectId -MemberId $user_objectID
-            write-host "Removed '$email' from Microsoft 365 team/Security group: $($_.DisplayName)" -ForegroundColor Cyan
+            remove-AzureADGroupMember -ObjectId $group.ObjectId -MemberId $user_objectID
+            write-host "Removed '$email' from Microsoft 365 team/Security group: $($group.DisplayName)" -ForegroundColor Cyan
         }
     }
 
@@ -83,9 +73,9 @@ function remove_user_group {
 }
 
 function remove_all_user_licenses {
-    param ([parameter(mandatory)] [PSCustomObject]$user)
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
 
-    [array]$Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
+    $Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
 
     if (!$Skus) {
         Write-Host "No licenses found for '$($user.UserPrincipalName)'" -ForegroundColor Magenta
@@ -115,9 +105,9 @@ function check_mailbox_type {
 }
 
 function check_license {
-    param ([parameter(mandatory)] [PSCustomObject]$user)
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
 
-    [array]$Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
+    $Skus = ($user | Select-Object -ExpandProperty AssignedLicenses).SkuID
 
     if (!$Skus) {
         Write-Host "$($user.UserPrincipalName) has no licenses" -ForegroundColor Green
@@ -128,7 +118,7 @@ function check_license {
 }
 
 function check_groups {
-    param ([parameter(mandatory)] [PSCustomObject]$user)
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
     
     if (Get-AzureADUserMembership -ObjectId $user.ObjectId | Where-Object { ($_.ObjectType -eq "Group") -and ($_.DirSyncEnabled -ne "True") }) {
         Write-Warning "$($user.UserPrincipalName) is a member of an email group"
@@ -139,7 +129,7 @@ function check_groups {
 }
 
 function disable_user_checks {
-    param ([parameter(mandatory)] [PSCustomObject]$user)
+    param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
 
     for ($i=0; $i -lt 3; $i++) {
         $global:retry = $false
@@ -155,9 +145,7 @@ function disable_user_checks {
 }
 
 function address_book_status {
-    param (
-        [parameter(mandatory)] [string]$email
-    )
+    param ([parameter(mandatory)] [string]$email)
 
     if ((get-mailbox $email).HiddenFromAddressListsEnabled -eq $false) {
         Write-Warning "'$email' is not hidden in the Global Address List."
