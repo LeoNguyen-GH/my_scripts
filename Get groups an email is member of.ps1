@@ -8,19 +8,16 @@ function export_all_groups {
     Remove-Item -Path $dir_path -Force -Recurse -ErrorAction SilentlyContinue
 
     $groups = Get-AzureADGroup -All:$true | select-object DisplayName, Mail, ObjectId, @{Name='ProxyAddresses'; Expression={($_.ProxyAddresses -join ';')}}, MailEnabled, SecurityEnabled
-    foreach ($group in $groups) {
-        Write-Progress -Activity "Exporting in progress" -Status "$($group / $groups.Count * 100)% Complete:" -PercentComplete ($group / $groups.Count * 100)
-        
-        $group_name = if ($group.Mail) { $group.Mail } else { $group.DisplayName }
-        
-        if(!($members = get_group_members -group $group_name)) {
-            $members = [PSCustomObject]@{
-                name = "" 
-                email = ""
-            }
-        }
+    
+    $total_groups = $groups.Count
+    for ($i=0; $i -lt $total_groups; $i++) {
+        $percent_complete = ($i / $total_groups) * 100
+        Write-Progress -Activity "Exporting in progress" -Status "$percent_complete% Complete" -PercentComplete $percent_complete
 
-        export_csv -data $members -csv_file_path "$dir_path\$group_name.csv"
+        $group_ref = if ($groups[$i].Mail) { $groups[$i].Mail } else { $groups[$i].DisplayName }
+        $members = if ($members = get_group_members -group $group_ref) { $members } else { [PSCustomObject]@{ name = ""; email = "" } }
+        
+        export_csv -data $members -csv_file_path "$dir_path\$group_ref.csv"
     }
 }
 
@@ -50,20 +47,14 @@ function find_members_of {
 }
 
 function generate_csv_member_of {
-    param (
-        [hashtable]$members_of
-    )
+    param ([hashtable]$members_of)
     
     $csv_dir_path =  "$PSScriptRoot\_logs\exported\members of $(Get-Date -Format 'dd-MM-yyyy h.mmtt')"
     [void](New-Item -Path $csv_dir_path -ItemType "directory")
     
     foreach ($key in $members_of.Keys) {
         # Create an array of custom objects with a property
-        $values = $members_of[$key] | ForEach-Object {
-            [PSCustomObject]@{
-                groups = $_ 
-            }
-        }
+        $values = $members_of[$key] | ForEach-Object { [PSCustomObject]@{ groups = $_  } }
         
         # Export the array of objects to a CSV file named after the key
         $values | Export-Csv -Path "$csv_dir_path\$key.csv" -NoTypeInformation
