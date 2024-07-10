@@ -1,3 +1,5 @@
+. "$PSScriptRoot\common\functions.ps1"
+
 function new_csv {
     param (
         [parameter(mandatory)] [string]$file_path,
