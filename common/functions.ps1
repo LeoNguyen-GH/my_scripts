@@ -149,25 +149,15 @@ function get_validated_input {
 
 function get_group_type {
     param ([parameter(mandatory)] [string]$email) 
-    
-    if (Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue) {
-        return "distribution list"
-    } elseif (Get-Recipient -Identity $email -RecipientTypeDetails DynamicDistributionGroup -ErrorAction SilentlyContinue) {
-        return "dynamic distribution list"
-    } elseif (Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue) {
-        return "Microsoft 365 group"
-    } elseif (Get-AzureADGroup -SearchString $email -ErrorAction SilentlyContinue) {
-        return "security group"
-    } elseif ($group = Get-Mailbox -Identity $email -ErrorAction SilentlyContinue) {
-        if ($group.RecipientTypeDetails -eq "SharedMailbox") {
-            return "shared mailbox"
-        } elseif ($group.RecipientTypeDetails -eq "RoomMailbox") {
-            return "RoomMailbox"
-        } elseif ($group.RecipientTypeDetails -eq "UserMailbox") {
-            return "user mailbox"
-        }
-    } else {
-        return $null
+
+    $mailbox = @{}
+    switch ($true) {
+        { Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue } { return "distribution list" }
+        { Get-DynamicDistributionGroup -Identity $email -ErrorAction SilentlyContinue } { return "dynamic distribution list" }
+        { Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue } { return "Microsoft 365 group" }
+        { Get-AzureADGroup -SearchString $email } { return "security group" }
+        { $mailbox[$email] = Get-Mailbox -Identity $email -ErrorAction SilentlyContinue; $mailbox } { return $mailbox[$email].RecipientTypeDetails } # SharedMailbox, RoomMailbox, UserMailbox
+        default { return $null }
     }
 }
 
