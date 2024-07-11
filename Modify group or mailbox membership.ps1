@@ -2,7 +2,7 @@
 
 function modify_group_membership {
     param (
-        [parameter(Mandatory)][ValidateSet("add", "remove")] [string]$action,
+        [parameter(Mandatory)][ValidateSet("Add", "Remove")] [string]$action,
         [parameter(Mandatory, ValueFromPipeline)] [string]$user,
         [parameter(Mandatory)] [string]$group,
         [bool]$display_total = $false
@@ -30,19 +30,19 @@ function modify_group_membership {
     process {
         try {
             switch ($group_type) {
-                "distribution list" { Invoke-Expression $commands["distribution"][$i] -Identity $group -Member $user -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction stop }
-                { $_ -in @("security group", "Microsoft 365 group") } { Invoke-Expression $commands["azure"][$i] -ObjectId $group_ID Invoke-Expression $commands["azure_id"][$i] $(Get-AzureADUser -ObjectId $user).ObjectId }
-                { $_ -in @("user mailbox", "RoomMailbox", "shared mailbox") } {
-                    Invoke-Expression $commands["mailbox_access"][$i] -Identity $group -User $user -AccessRights FullAccess -InheritanceType All
-                    Invoke-Expression $commands["mailbox_send_as"][$i] -Identity $group -Trustee $user -AccessRights SendAs -Confirm:$false }
+                "distribution list" { & $commands["distribution"][$i] -Identity $group -Member $user -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction stop }
+                { $_ -in @("security group", "Microsoft 365 group") } { $command = "$($commands['azure'][$i]) -ObjectId $group_ID $($commands['azure_id'][$i]) `$(Get-AzureADUser -ObjectId $user).ObjectId"; invoke-expression $command }
+                { $_ -match "Mailbox" } {
+                    [void](& $commands["mailbox_access"][$i] -Identity $group -User $user -AccessRights FullAccess -InheritanceType All -Confirm:$false)
+                    [void](& $commands["mailbox_send_as"][$i] -Identity $group -Trustee $user -AccessRights SendAs -Confirm:$false) }
             }
         
             $group_updates++
-            Write-Host "$($action)ed '$user' -> $group_type '$group'" -ForegroundColor Green
+            Write-Host "$action`: '$user' -> $group_type '$group'" -ForegroundColor Green
         } catch { write-warning $_ }
     }
 
-    end { if ($display_total) {Write-Host "Total users $($action)ed - $group`: $group_updates"} }
+    end { if ($display_total) {Write-Host "Total users $action - $group`: $group_updates"} }
 }
 
 function main {
