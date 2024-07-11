@@ -68,7 +68,7 @@ function get_multi_user_input {
     return $data = if ($sort) { $data | Sort-Object } else { $data }
 }
 
-function get_email_type {
+function verify_email_existence {
     param (
         [parameter(mandatory)] [string]$email,
         [bool]$type_aduser = $false
@@ -76,22 +76,9 @@ function get_email_type {
     
     if ($type_aduser) {
         return $result =  if (Get-ADUser -Filter {UserPrincipalName -eq $email}) { $true } else { $null }
-    }
-    
-    if (Get-AzureADUser -SearchString $email -All $true) {
-        return "cloud user"
-    } elseif (Get-DistributionGroup -Identity $email -ErrorAction SilentlyContinue) {
-        return "distribution list"
-    } elseif (Get-UnifiedGroup -Identity $email -ErrorAction SilentlyContinue) {
-        return "Microsoft 365 group"
     } else {
-        try { $object = Get-AzureADContact -All $true -Filter "mail eq $email" } catch {} 
-        if ($object) {
-            return "contact email"
-        }
+        return $result = if ((Get-Recipient -Identity $email -ErrorAction SilentlyContinue) -or (Get-AzureADGroup -SearchString $email)) { $true } else { $null }
     }
-    
-    return $null
 }
 
 function get_valid_email_input {
@@ -100,17 +87,10 @@ function get_valid_email_input {
         [bool]$type_aduser = $false
     )
     
-    while (!(get_email_type -email $email -type_aduser $type_aduser)) {
+    while (!(verify_email_existence -email $email -type_aduser $type_aduser)) {
         Write-Host "Email '$email' could not be found" -ForegroundColor Red
         
-        do {
-            $email = (Read-Host "Enter a valid email (Input 'skip' to skip)" ).trim()
-        } while (!$email)
-        
-        if ($email -eq "skip") {
-            Write-host "Skipping email '$email''" -ForegroundColor Yellow
-            return $null
-        }
+        if (($email = get_validated_input -condition "!`$user_input" -prompt "Enter a valid email (Input 'skip' to skip)") -eq "skip") { return $null }
     }
     
     Write-Host "$email found" -ForegroundColor Cyan
