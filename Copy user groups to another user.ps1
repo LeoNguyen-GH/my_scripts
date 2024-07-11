@@ -1,5 +1,5 @@
 . "$PSScriptRoot\common\functions.ps1"
-get_functions -file_path "$PSScriptRoot\Add users to groups and mailboxes.ps1" | Invoke-Expression
+get_functions -file_path "$PSScriptRoot\Modify group or mailbox membership.ps1" | Invoke-Expression
 
 function display_groups {
     param ([parameter(mandatory)] [Microsoft.Open.AzureAD.Model.DirectoryObject]$user)
@@ -15,13 +15,13 @@ function main {
 
     # Discontinue the process if source and target user is the same
     if (($source_user_UPN = $source_user.UserPrincipalName) -eq ($target_user_UPN = $target_user.UserPrincipalName)) {
-        write-host "Source and target user can't be the same, cancelling current process" -ForegroundColor Red
+        write-error "Source and target user can't be the same, cancelling current process"
         return
     }
 
     # Get source user groups
     if (!($source_user_groups = Get-AzureADUserMembership -ObjectId $source_user.ObjectId -All $true)) {
-        write-warning "No email groups was found for the source user '$source_user_UPN' to mirror from, cancelling current process" -ForegroundColor Yellow
+        write-warning "No email groups was found for the source user '$source_user_UPN' to mirror from, cancelling current process"
         return
     }
 
@@ -38,7 +38,7 @@ function main {
         $group_ref = if ($group.mail) {$group.mail} else {$group.Displayname}
         if ($group_ref -in $filtered_groups) { continue }
 
-        add_group_member -user $target_user_UPN -group $group_ref
+        modify_group_membership -action "add" -user $target_user_UPN -group $group_ref
     }
     
     display_groups -user $target_user
