@@ -51,19 +51,22 @@ def multi_user_input_empty_check(prompt, allow_dupe_input=None, convert_int=None
                 data = list(map(int, data))
             return data
         
-def num_input(prompt, condition, set_message, default_input=None):
+def num_input(prompt, condition, set_message = None, default_input=None):
     if default_input:
-        printCyan(f"{set_message} {default_input}")
+        if set_message:
+            printCyan(f"{set_message} {default_input}")
         return default_input
+    
     while True:
         try:
             user_input = int(input(prompt))
             if condition(user_input):
-                printCyan(f"{set_message} {user_input}")
+                if set_message:
+                    printCyan(f"{set_message} {user_input}")
                 return user_input
             raise Exception
-        except Exception:
-            printRed("Invalid input, try again.")
+        except Exception as e:
+            printRed("Invalid input.")
 
 def countdown_wait(start):
     for i in range(start, -1, -1):
@@ -73,6 +76,7 @@ def countdown_wait(start):
 def user_choice(prompt, option_selected_Y = None, option_selected_N = None):
     while True:
         user_input = input(prompt).strip().upper()
+        
         if user_input == "Y":
             if option_selected_Y:
                 printCyan(option_selected_Y)
@@ -82,7 +86,7 @@ def user_choice(prompt, option_selected_Y = None, option_selected_N = None):
                 printCyan(option_selected_N)
             return False
         else:
-            printRed("Invalid input, try again")
+            printRed("Invalid input.")
 
 def directory_contains_files(directory_path):
     for root, dirs, files in Path(directory_path).walk():
@@ -131,8 +135,8 @@ class CustomFormatter(logging.Formatter):
     red = "\x1b[31;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(asctime)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
-
+    format = "%(asctime)s - %(levelname)s - %(message)s" 
+    
     FORMATS = {
         logging.DEBUG: grey + format + reset,
         logging.INFO: grey + format + reset,
@@ -152,7 +156,7 @@ def setup_logger(log_path = None, error_log_path = None, logging_level_console =
     # create logger
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)", datefmt="%Y-%m-%d, %H:%M:%S")
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d, %H:%M:%S")
 
     # create console handler with a higher log level
     console_handler = logging.StreamHandler()
@@ -176,18 +180,19 @@ def setup_logger(log_path = None, error_log_path = None, logging_level_console =
 
     return logger
 
-def purge_empty_files(dir_path):
-    for root, dirs, files in os.walk(dir_path):
-        for file in files:
-            if file.endswith(('.txt', '.log')):
-                file_path = os.path.join(root, file)
-                with open(file_path, mode="r", encoding="utf-8") as file:
-                    file_contents  = file.read().strip()
-                if not file_contents:
-                    try:
-                        os.remove(file_path)
-                    except Exception as e:
-                        printRed("Error: {e}")
+def remove_empty_text_files(dir_path):
+    file_paths, _ = get_files_folders(dir_path)
+    
+    def read_and_delete(file_path):
+        with open(file_path, mode="r", encoding="utf-8") as file:
+            file_contents  = file.read().strip()
+            
+        if not file_contents:
+            file_path.unlink(missing_ok=True)
+    
+    for file_path in file_paths:
+        if file_path.suffix in ('.txt', '.log'):
+            read_and_delete(file_path)
 
 def get_files_folders(directory):
     file_paths, dir_paths = [], []
@@ -218,3 +223,11 @@ def elapsed_time(seconds):
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{int(hours):d}h {int(minutes):d}min {int(seconds):d}s"
+
+def create_text_file(text_file_path):
+    try:
+        with open(text_file_path, mode="x") as file:
+            file.write("")
+    except FileExistsError:
+        pass
+    
