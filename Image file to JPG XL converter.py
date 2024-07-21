@@ -5,6 +5,7 @@ import time
 from collections import Counter
 import uuid
 from datetime import datetime
+from tqdm import tqdm
 from common.functions import *
 
 def preset_paths(file_path):
@@ -47,15 +48,25 @@ def filename_validation(file_name, file_path):
         file_name.encode('ascii'); return True
     except UnicodeEncodeError:
         logging.warning(f"{file_path} - Skipped (contains non-ASCII characters)"); return False
-        
+
+def processed_file_exist(file_path):
+    if file_path.with_suffix(".jxl").exists():
+        global img_counter; img_counter["skipped"] += 1
+        logging.warning(f"{file_path} - Skipped (processed file path already exists)")
+        return True
+
 def undo_process(original_file_path, file_path, remove_file, log_error):
     # Preserve the original file if an error occured
+    global img_counter; img_counter['errored'] += 1
+    
     logging.error(log_error)
-    printYellow(f"Moving file '{file_path}' back to its original location '{original_file_path}', removing file '{remove_file}'.")
     
+    logging.warning(f"{file_path} - Moving file back to its original location '{original_file_path}'.")
     file_path.rename(original_file_path)
-    remove_file.unlink(missing_ok=True)
     
+    logging.warning(f"{remove_file} - Removing file.")
+    remove_file.unlink(missing_ok=True)
+
 def convert_img(original_file_path, source_file_path, destination_file_path):
     # Use CJXL to convert the moved image to a JXL image file
     try:
@@ -64,7 +75,7 @@ def convert_img(original_file_path, source_file_path, destination_file_path):
             undo_process(original_file_path, source_file_path, destination_file_path, f"{original_file_path} - Processed file not found"); return False
         return True
     except (subprocess.CalledProcessError, Exception) as e:
-        undo_process(original_file_path, source_file_path, destination_file_path, f"{original_file_path} - Error: {e}"); return False
+        undo_process(original_file_path, source_file_path, destination_file_path, f"{original_file_path} - {e}"); return False
 
 def decode_and_compare_img(source_file_path, processed_file_path):
     # decode the processed file
@@ -80,18 +91,20 @@ def decode_and_compare_img(source_file_path, processed_file_path):
 def process_result(result, file_path, source_file_path, processed_file_path):
     if result.returncode == 0:
         # Move processed file back to source file directory and remove the source file
-        logging.info(f"'{file_path}' - Done: magick compare returned {result.returncode}")
+        logging.debug(f"'{file_path}' - Done: magick compare returned {result.returncode}")
         
         processed_file_path.rename(file_path.with_suffix('.jxl'))
         
         source_file_path.unlink()
         
         global img_counter; img_counter['processed'] += 1
-        print(f"Current images processed: {img_counter['processed']}/{img_counter['submitted']}")
     else:
         undo_process(file_path, source_file_path, processed_file_path, f"{file_path} - Failed: magick compare returned {result.returncode}")
 
 def process_image(file_path, temp_dir_path):
+    if processed_file_exist(file_path):
+        return
+    
     temp_dir_path.mkdir(parents=True, exist_ok=True)
     
     source_file_path = temp_dir_path.joinpath(file_path.stem + "_" + str(uuid.uuid4()) + file_path.suffix)
@@ -123,11 +136,15 @@ def start_executor(dir_path, function, max_workers, temp_dir_path):
     global img_counter
     futures = []
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for file in list(dir_path.glob('**/*')): # Converting to a list so all files are collected at once, instead of yielding one at a time
-            if file.is_file() and file.suffix.lower() in ('.png', '.jpg', '.jpeg') and filename_validation(file.name, file) and file.parent != temp_dir_path:
-                img_counter['submitted'] += 1
-                futures.append(executor.submit(function, file, temp_dir_path))
+    img_files = [file for file in list(dir_path.glob('**/*')) if file.is_file() and file.suffix.lower() in ('.png', '.jpg', '.jpeg') and filename_validation(file.name, file) and file.parent != temp_dir_path]
+    
+    with tqdm(total=len(img_files), unit="Img") as pbar:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for file in img_files:
+                    img_counter['submitted'] += 1
+                    future = executor.submit(function, file, temp_dir_path)
+                    future.add_done_callback(lambda p: pbar.update())
+                    futures.append(future)
                 
         concurrent.futures.wait(futures)
 
@@ -179,18 +196,19 @@ def main():
     timer = total_time_taken(); next(timer)
     
     global img_counter
-    img_counter = Counter({"submitted": 0, "processed": 0})
+    img_counter = Counter({"submitted": 0, "processed": 0, "errored": 0, "skipped": 0})
     temp_dir_path = dir_path.joinpath("_temp")
     
     start_executor(dir_path, process_image, max_workers, temp_dir_path)
     
-    temp_dir_path.rmdir()
+    if temp_dir_path.exists():
+        temp_dir_path.rmdir()
     
     hours, minutes, seconds = next(timer)
 
     size_diff, percentage = next(space_saved)
 
-    logging.info(f"Total images submitted: {img_counter['submitted']}, processed: {img_counter['processed']}")
+    logging.info(f"Total images submitted: {img_counter['submitted']}, processed: {img_counter['processed']}, errored: {img_counter["errored"]}, skipped: {img_counter["skipped"]}")
     logging.info(f"Total space saved: {size_diff} ({percentage} of original size)")
     logging.info(f"Total elapsed time: {int(hours)} hours, {int(minutes)} minutes, {int(seconds)} seconds")
 
