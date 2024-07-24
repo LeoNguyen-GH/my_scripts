@@ -93,11 +93,15 @@ def process_result(result, file_path, source_file_path, processed_file_path):
         # Move processed file back to source file directory and remove the source file
         logging.debug(f"'{file_path}' - Done: magick compare returned {result.returncode}")
         
+        global img_counter
+        img_counter['original file sizes'] += source_file_path.stat().st_size
+        img_counter['processed file sizes'] += processed_file_path.stat().st_size
+        
         processed_file_path.rename(file_path.with_suffix('.jxl'))
         
         source_file_path.unlink()
         
-        global img_counter; img_counter['processed'] += 1
+        img_counter['processed'] += 1
     else:
         undo_process(file_path, source_file_path, processed_file_path, f"{file_path} - Failed: magick compare returned {result.returncode}")
 
@@ -148,20 +152,14 @@ def start_executor(dir_path, function, max_workers, temp_dir_path):
                 
         concurrent.futures.wait(futures)
 
-def calculate_space_saved(dir_path):
-    original_dir_size = dir_total_size(dir_path)
-    yield
-    
-    # Calculate directory size after processing
-    processed_dir_size = dir_total_size(dir_path)
-    
+def calculate_space_saved(file_sizes_before: int, file_sizes_after: int):
     # Calculate size difference between original and processed directory
-    size_diff = bytes_unit_conversion(original_dir_size - processed_dir_size)
+    size_diff = bytes_unit_conversion(file_sizes_before - file_sizes_after)
     
     # Calculate the difference between original and process directory in percentage terms
-    percentage_processed_to_original = f"{(processed_dir_size / original_dir_size) * 100:.3f}%"
+    percentage_processed_to_original = f"{(file_sizes_after / file_sizes_before) * 100:.3f}%"
     
-    yield size_diff, percentage_processed_to_original
+    return size_diff, percentage_processed_to_original
 
 def release_logger_handlers(logger):
     for handler in logger.handlers[:]:
@@ -191,12 +189,10 @@ def main():
     )
     logging.getLogger('asyncio').disabled = True
     
-    space_saved = calculate_space_saved(dir_path); next(space_saved)
-        
     timer = total_time_taken(); next(timer)
     
     global img_counter
-    img_counter = Counter({"submitted": 0, "processed": 0, "errored": 0, "skipped": 0})
+    img_counter = Counter({"submitted": 0, "processed": 0, "errored": 0, "skipped": 0, "original file sizes": 0, "processed file sizes": 0})
     temp_dir_path = dir_path.joinpath("_temp")
     
     start_executor(dir_path, process_image, max_workers, temp_dir_path)
@@ -206,7 +202,7 @@ def main():
     
     hours, minutes, seconds = next(timer)
 
-    size_diff, percentage = next(space_saved)
+    size_diff, percentage = calculate_space_saved(img_counter["original file sizes"], img_counter["processed file sizes"])
 
     logging.info(f"Total images submitted: {img_counter['submitted']}, processed: {img_counter['processed']}, errored: {img_counter["errored"]}, skipped: {img_counter["skipped"]}")
     logging.info(f"Total space saved: {size_diff} ({percentage} of original size)")
