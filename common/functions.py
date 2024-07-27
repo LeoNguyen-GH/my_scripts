@@ -3,90 +3,89 @@ from datetime import datetime
 import os
 import logging
 from pathlib import Path
+import openpyxl
 
-def printRed(skk):
-    print("\033[91m{}\033[00m".format(skk))
-def printGreen(skk):
-    print("\033[92m{}\033[00m".format(skk))
-def printYellow(skk):
-    print("\033[93m{}\033[00m".format(skk))
-def printCyan(skk):
-    print("\033[96m{}\033[00m".format(skk))
-
-def printRed_Raised(skk):
-    return "\033[91m{}\033[00m".format(skk)
+def print_colored(text: str, color: str = "black", no_newline: bool = False, end_line: str = "\n"):
+    color_codes = {
+        "black": "30",
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "white": "37",
+        "bright black": "90",
+        "bright red": "91",
+        "bright green": "92",
+        "bright yellow": "93",
+        "bright blue": "94",
+        "bright magenta": "95",
+        "bright cyan": "96",
+        "bright white": "97"
+    }
+    
+    if color not in color_codes:
+        raise ValueError(f"Invalid color '{color}'. Valid options are: {', '.join(color_codes.keys())}")
+    
+    end_line = "" if no_newline else end_line
+    print(f"\033[{color_codes[color]}m{text}\033[00m", end=end_line)
 
 def print_dash_across_terminal():
     print("-" * (os.get_terminal_size()).columns)
 
-def multi_user_input(prompt, allow_dupe_input=None):
+def multi_user_input(prompt: str, dupe_input: bool = False, convert_to_int: bool = False):
     print(prompt)
 
     data = []
-    while True:
-        user_input = input("").strip()
-        if user_input == "q":
-            break
-        elif not user_input:
-            continue
-        else:
-            data.append(user_input)
+    while not data:
+        while True:
+            user_input = input("").strip()
+            if user_input == "q":
+                break
+            elif not user_input:
+                continue
+            else:
+                data.append(user_input)
 
-    if not allow_dupe_input:
-        data = list(dict.fromkeys(data)) # Removes duplicate elements in list
+    if not dupe_input:
+        data = list(dict.fromkeys(data))
+    if convert_to_int:
+        data = list(map(int, data))
     return data
-
-def check_empty_variable(var):
-    if not var:
-        printRed("Input is empty")
-        return True
-    else:
-        return False
-
-def multi_user_input_empty_check(prompt, allow_dupe_input=None, convert_int=None):
-    while True:
-        data = multi_user_input(prompt, allow_dupe_input)
-        if check_empty_variable(data) is False:
-            if convert_int:
-                data = list(map(int, data))
-            return data
         
-def num_input(prompt, condition, set_message = None, default_input=None):
-    if default_input:
-        if set_message:
-            printCyan(f"{set_message} {default_input}")
-        return default_input
-    
+def valid_num_input(prompt: str, condition: callable, cond_met_msg: str = None):
     while True:
         try:
             user_input = int(input(prompt))
+            
             if condition(user_input):
-                if set_message:
-                    printCyan(f"{set_message} {user_input}")
+                if cond_met_msg:
+                    print_colored(cond_met_msg.format(user_input=user_input), "cyan")
                 return user_input
-            raise Exception
-        except Exception as e:
-            printRed("Invalid input.")
+            raise ValueError
+        except ValueError:
+            print_colored("Invalid input.", "red")
 
 def countdown_wait(start):
     for i in range(start, -1, -1):
             print(f"Time remaining before continuing: {i} seconds", end='\r')  # Clear the previous line
             time.sleep(1)
 
-def user_choice(prompt, option_selected_Y = None, option_selected_N = None):
+def get_user_confirmation(prompt: str, option_selected_Y: str = None, option_selected_N: str = None):
     while True:
         user_input = input(prompt).strip().upper()
         
         if user_input == "Y":
             if option_selected_Y:
-                printCyan(option_selected_Y)
+                print_colored(option_selected_Y, "cyan")
             return True
         elif user_input == "N":
             if option_selected_N:
-                printCyan(option_selected_N)
+                print_colored(option_selected_N, "cyan")
             return False
         else:
-            printRed("Invalid input.")
+            print_colored("Invalid input.", "red")
 
 def directory_contains_files(directory_path):
     for root, dirs, files in Path(directory_path).walk():
@@ -135,8 +134,8 @@ class CustomFormatter(logging.Formatter):
     red = "\x1b[31;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    format = "%(asctime)s - %(levelname)s - %(message)s" 
-    
+    format = "%(asctime)s - %(levelname)s - %(message)s" #"%(asctime)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+
     FORMATS = {
         logging.DEBUG: grey + format + reset,
         logging.INFO: grey + format + reset,
@@ -156,7 +155,7 @@ def setup_logger(log_path = None, error_log_path = None, logging_level_console =
     # create logger
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d, %H:%M:%S")
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d, %H:%M:%S") #logging.Formatter("%(asctime)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)", datefmt="%Y-%m-%d, %H:%M:%S")
 
     # create console handler with a higher log level
     console_handler = logging.StreamHandler()
@@ -230,4 +229,13 @@ def create_text_file(text_file_path):
             file.write("")
     except FileExistsError:
         pass
+
+def initalize_excel_file(excel_file_path, excel_file_headers):
+    workbook = openpyxl.load_workbook(excel_file_path) if excel_file_path.exists() else openpyxl.Workbook()
+    sheet = workbook.active
     
+    if not excel_file_path.exists():
+        sheet.append(excel_file_headers)
+        workbook.save(excel_file_path)
+        
+    return workbook, sheet
