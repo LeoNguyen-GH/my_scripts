@@ -30,7 +30,7 @@ def dir_path_prompt(options: dict):
 
 def is_dir_path_valid(dir_path):
     if not dir_path.exists() or not dir_path:
-        printRed(f"The directory '{dir_path}' could not be found."); return False
+        print_colored(f"The directory '{dir_path}' could not be found.", "red"); return False
     return True
 
 def get_dir_path(options: dict):
@@ -40,7 +40,7 @@ def get_dir_path(options: dict):
         if not is_dir_path_valid(dir_path):
             continue
         else:
-            if user_choice(f"Do you confirm the target directory '{dir_path}' is correct? (Y/N): "):
+            if get_user_confirmation(f"Do you confirm the target directory '{dir_path}' is correct? (Y/N): "):
                 return dir_path
 
 def filename_validation(file_name, file_path):
@@ -102,6 +102,7 @@ def process_result(result, file_path, source_file_path, processed_file_path):
         source_file_path.unlink()
         
         img_counter['processed'] += 1
+        #print(f"Current images processed: {img_counter['processed']}/{img_counter['submitted']}")
     else:
         undo_process(file_path, source_file_path, processed_file_path, f"{file_path} - Failed: magick compare returned {result.returncode}")
 
@@ -134,7 +135,7 @@ def total_time_taken():
     hours, remainder = divmod(elapsed_time, 3600)
     minutes, seconds = divmod(remainder, 60)
     
-    yield hours, minutes, seconds
+    yield int(hours), int(minutes), int(seconds)
     
 def start_executor(dir_path, function, max_workers, temp_dir_path):
     global img_counter
@@ -176,10 +177,7 @@ def main():
     
     dir_path = get_dir_path(options)
     
-    max_workers = num_input(
-        prompt = "Input the amount of images to process in parallel (Must be greater than 0): ",
-        condition = lambda x: x > 0
-    )
+    max_workers = valid_num_input("Input the amount of images to process in parallel (Must be greater than 0): ", lambda x: x > 0)
     
     log_dir = Path.home().joinpath(r"Documents\_Logs\Image to JXL converter"); current_date_time = datetime.now().strftime("Date=%Y-%m-%d & Time=%H.%M.%S")
     logger = setup_logger(
@@ -206,7 +204,7 @@ def main():
 
     logging.info(f"Total images submitted: {img_counter['submitted']}, processed: {img_counter['processed']}, errored: {img_counter["errored"]}, skipped: {img_counter["skipped"]}")
     logging.info(f"Total space saved: {size_diff} ({percentage} of original size)")
-    logging.info(f"Total elapsed time: {int(hours)} hours, {int(minutes)} minutes, {int(seconds)} seconds")
+    logging.info(f"Total elapsed time: {hours} hours, {minutes} minutes, {seconds} seconds")
 
     release_logger_handlers(logger)
 
