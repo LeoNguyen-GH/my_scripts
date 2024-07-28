@@ -24,8 +24,8 @@ def display_options(options: dict):
     for key, value in options.items():
         print(f"{key}. {value}")
 
-def dir_path_prompt(options: dict):
-    user_input = input("Enter in the directory path containing the images to convert to .jxl or input a number corresponding to the preset path: ").strip().strip('"')
+def dir_path_prompt(options: dict, prompt):
+    user_input = input(prompt).strip().strip('"')
     return Path(options[int(user_input)]) if user_input in str(options) else Path(user_input)
 
 def is_dir_path_valid(dir_path):
@@ -33,9 +33,9 @@ def is_dir_path_valid(dir_path):
         print_colored(f"The directory '{dir_path}' could not be found.", "red"); return False
     return True
 
-def get_dir_path(options: dict):
+def get_dir_path(options: dict, prompt: str):
     while True:
-        dir_path = dir_path_prompt(options)
+        dir_path = dir_path_prompt(options, prompt)
         
         if not is_dir_path_valid(dir_path):
             continue
@@ -175,11 +175,12 @@ def main():
     
     display_options(options)
     
-    dir_path = get_dir_path(options)
+    dir_path = get_dir_path(options, "Enter in the directory path containing the images to convert to .jxl or input a number corresponding to the preset path: ")
     
     max_workers = valid_num_input("Input the amount of images to process in parallel (Must be greater than 0): ", lambda x: x > 0)
     
-    log_dir = Path.home().joinpath(r"Documents\_Logs\Image to JXL converter"); current_date_time = datetime.now().strftime("Date=%Y-%m-%d & Time=%H.%M.%S")
+    log_dir = Path.home().joinpath(r"Documents\_Logs\Image to JXL converter")
+    current_date_time = datetime.now().strftime("Date=%Y-%m-%d & Time=%H.%M.%S")
     logger = setup_logger(
         log_path = fr"{log_dir}\{current_date_time}.log", 
         error_log_path = fr"{log_dir}\{current_date_time} - error log.log",
