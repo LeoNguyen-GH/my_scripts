@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 import openpyxl
 
-def print_colored(text: str, color: str = "black", no_newline: bool = False, end_line: str = "\n"):
+def print_colored(text: str, color: str = "white", no_newline: bool = False, end_line: str = "\n"):
     color_codes = {
         "black": "30",
         "red": "31",
@@ -36,7 +36,7 @@ def print_dash_across_terminal():
 
 def multi_user_input(prompt: str, dupe_input: bool = False, convert_to_int: bool = False):
     print(prompt)
-
+    
     data = []
     while not data:
         while True:
@@ -47,7 +47,7 @@ def multi_user_input(prompt: str, dupe_input: bool = False, convert_to_int: bool
                 continue
             else:
                 data.append(user_input)
-
+    
     if not dupe_input:
         data = list(dict.fromkeys(data))
     if convert_to_int:
@@ -180,7 +180,7 @@ def setup_logger(log_path = None, error_log_path = None, logging_level_console =
     return logger
 
 def remove_empty_text_files(dir_path):
-    file_paths, _ = get_files_folders(dir_path)
+    file_paths, _ = get_files_and_folders(dir_path)
     
     def read_and_delete(file_path):
         with open(file_path, mode="r", encoding="utf-8") as file:
@@ -193,11 +193,13 @@ def remove_empty_text_files(dir_path):
         if file_path.suffix in ('.txt', '.log'):
             read_and_delete(file_path)
 
-def get_files_folders(directory):
+def get_files_and_folders(dir_path):
     file_paths, dir_paths = [], []
-    for root, dirs, files in Path(directory).walk():
-        file_paths.extend(root.joinpath(file) for file in files if not any(string in file for string in ["Thumbs.db", "desktop.ini"]))
-        dir_paths.extend(root.joinpath(dir) for dir in dirs if not any(string in dir for string in ["$RECYCLE.BIN"]))
+    for root, dirs, files in Path(dir_path).walk():
+        dirs[:] = [dir for dir in dirs if dir not in ["$RECYCLE.BIN"]]
+        
+        file_paths.extend(root / file for file in files if not any(string in file for string in ["Thumbs.db", "desktop.ini"]))
+        dir_paths.extend(root / dir for dir in dirs)
     return file_paths, dir_paths
 
 # Usage: dt = date_time()
@@ -230,7 +232,8 @@ def create_text_file(text_file_path):
     except FileExistsError:
         pass
 
-def initalize_excel_file(excel_file_path, excel_file_headers):
+def initalize_excel_file(excel_file_path, excel_file_headers: list):
+    excel_file_path = Path(excel_file_path)
     workbook = openpyxl.load_workbook(excel_file_path) if excel_file_path.exists() else openpyxl.Workbook()
     sheet = workbook.active
     
